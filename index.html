@@ -5632,9 +5632,14 @@ GRANT EXECUTE ON FUNCTION public.fix_id_sequences() TO anon, authenticated;`;
                 fetchStockVariantServer(),
             ]), TIMEOUT_MS, 'Muat ringkasan stok');
 
-            // Tanpa RPC stok, dashboard harus memakai kalkulator lokal agar tetap akurat.
-            if (!_stockVariantServer) {
+            // Jika salah satu RPC ringkasan gagal, dashboard harus memuat ledger lokal
+            // agar KPI tidak berada dalam kondisi campuran (misalnya kartu brand terisi
+            // dari server tetapi Total Produk/Barang Keluar masih 0 dari state kosong).
+            if (!_stockVariantServer || !_dashboardTotalsServer) {
                 await withTimeout(ensureHistoryDataLoaded(), TIMEOUT_MS, 'Muat data stok lokal');
+                // Jangan mencampur sumber server dan lokal pada satu dashboard.
+                // Jika pasangan RPC tidak lengkap, pakai kalkulator lokal secara konsisten.
+                if (!_stockVariantServer || !_dashboardTotalsServer) _stockVariantServer = null;
             }
 
         } catch(e) {
