@@ -4945,6 +4945,32 @@ END $$;</textarea>
         }
     }
 
+    // Diagnostik sementara untuk membedakan angka dashboard, RPC varian, dan data lokal.
+    // Tidak mengubah perhitungan produksi; dapat dipanggil dari console dengan
+    // `debugStokAngka()` setelah aplikasi selesai memuat.
+    window.debugStokAngka = function () {
+        const serverVariantTotal = _stockVariantServer
+            ? [..._stockVariantServer.values()].reduce((sum, qty) => sum + (Number(qty) || 0), 0)
+            : null;
+        const localInput = appData.riwayatInput.reduce((sum, row) =>
+            sum + (row.items || []).reduce((s, item) => s + (Number(item.qty) || 0), 0) * (row.mode === 'retur' ? -1 : 1), 0);
+        const localOutput = appData.riwayatTransaksi.reduce((sum, row) =>
+            sum + (row.items || []).reduce((s, item) => s + (Number(item.qty) || 0), 0), 0);
+        const result = {
+            dashboardRpc: _dashboardTotalsServer,
+            dashboardNet: _dashboardTotalsServer
+                ? _dashboardTotalsServer.masuk - _dashboardTotalsServer.retur - _dashboardTotalsServer.keluar
+                : null,
+            serverVariantTotal,
+            localNet: localInput - localOutput,
+            inputHeaders: appData.riwayatInput.length,
+            transactionHeaders: appData.riwayatTransaksi.length,
+            inputUniqueIds: new Set(appData.riwayatInput.map(row => String(row.id))).size,
+        };
+        console.table(result);
+        return result;
+    };
+
     // ==================== FETCH TANPA LIMIT (ANTI TERPOTONG) ====================
     // Supabase/PostgREST membatasi hasil query max 1000 baris per request secara default.
     // Kalau tabel (misal riwayat_input_item) sudah punya >1000 baris, select('*') biasa
@@ -7467,7 +7493,13 @@ function updateSSK(tab, rowId) {
                 });
                 const kpiTotalStokEl = document.getElementById('kpi-total-stok');
                 const kpiTotalBrandEl = document.getElementById('kpi-total-brand');
-                if (kpiTotalStokEl) { kpiTotalStokEl.textContent = brandStok.reduce((s, b) => s + Math.max(0, b.total), 0).toLocaleString('id-ID'); kpiTotalStokEl.classList.remove('kpi-skel'); }
+                // Jika aggregate dashboard tersedia, KPI harus memakai angka net server.
+                // Jangan menimpanya dengan penjumlahan kartu brand karena RPC varian dapat
+                // memiliki granularitas berbeda dan berisiko menghitung satu varian dua kali.
+                if (kpiTotalStokEl && !_dashboardTotalsServer) {
+                    kpiTotalStokEl.textContent = brandStok.reduce((s, b) => s + Math.max(0, b.total), 0).toLocaleString('id-ID');
+                    kpiTotalStokEl.classList.remove('kpi-skel');
+                }
                 if (kpiTotalBrandEl) { kpiTotalBrandEl.textContent = totalKeluar.toLocaleString('id-ID'); kpiTotalBrandEl.classList.remove('kpi-skel'); }
                 if (brandStok.length === 0) {
                     brandListEl.innerHTML = '<div class="text-center text-black text-[11px] py-8 flex flex-col items-center gap-2"><i class="fa-solid fa-inbox text-2xl opacity-40"></i>Belum ada stok tersedia.</div>';
