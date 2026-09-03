@@ -10539,11 +10539,10 @@ function updateSSK(tab, rowId) {
         if (isLoading) {
             if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
             btn.disabled = true;
-            btn.classList.add('opacity-60', 'pointer-events-none');
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>${loadingText || 'MENYIMPAN...'}</span>`;
+            btn.classList.add('opacity-40', 'pointer-events-none');
         } else {
             btn.disabled = false;
-            btn.classList.remove('opacity-60', 'pointer-events-none');
+            btn.classList.remove('opacity-40', 'pointer-events-none');
             if (btn.dataset.originalHtml) {
                 btn.innerHTML = btn.dataset.originalHtml;
                 delete btn.dataset.originalHtml;
