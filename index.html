@@ -90,7 +90,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Radja Production - App</title>
 
-    <link rel="manifest" href="/inventory/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -98,14 +98,14 @@
     <!-- Cegah browser Android/Chrome memunculkan toolbar pencarian -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
-    <link rel="apple-touch-icon" href="/inventory/icon-192.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="/inventory/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/inventory/icon-512.png">
+    <link rel="apple-touch-icon" href="./icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
 
-    <script src="/inventory/js/data/supabase-repository.js"></script>
-    <script src="/inventory/js/data/data-mappers.js"></script>
-    <script src="/inventory/js/domain/stock-calculator.js"></script>
-    <script src="/inventory/js/core/performance-monitor.js"></script>
+    <script src="./js/data/supabase-repository.js"></script>
+    <script src="./js/data/data-mappers.js"></script>
+    <script src="./js/domain/stock-calculator.js"></script>
+    <script src="./js/core/performance-monitor.js"></script>
     <script>
         // ==================== NOTIFIKASI UPDATE VERSI APLIKASI ====================
         // Cara kerja: browser otomatis cek ulang service-worker.js tiap kali app dibuka/foreground.
@@ -137,7 +137,7 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/inventory/service-worker.js')
+                navigator.serviceWorker.register('./service-worker.js')
                     .then(reg => {
                         console.log('✅ SW registered:', reg.scope);
                         _swRegistrationGlobal = reg;

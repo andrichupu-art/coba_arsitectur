@@ -2,9 +2,14 @@
 // SERVICE WORKER - RADJA PRODUCTION PWA
 // ============================================
 
-const CACHE_NAME = 'radja-production-v11.2';
-const STATIC_CACHE = 'radja-static-v11.2';
-const BASE = '/inventory';
+const CACHE_NAME = 'radja-production-v11.3';
+const STATIC_CACHE = 'radja-static-v11.3';
+// BASE dihitung otomatis dari lokasi file service-worker.js ini sendiri (bukan hardcode
+// '/inventory'), supaya tetap benar walau folder deploy berubah (root domain, subfolder
+// repo GitHub Pages apa pun, dsb). self.location.pathname untuk SW ini misalnya
+// "/inventory/service-worker.js" atau "/radja-production/service-worker.js" -> BASE jadi
+// "/inventory" atau "/radja-production" secara otomatis.
+const BASE = self.location.pathname.replace(/\/service-worker\.js$/, '');
 
 const STATIC_ASSETS = [
     BASE + '/manifest.json',
