@@ -114,6 +114,13 @@ ui/
 - React belum digunakan.
 - Database dan nama tabel tetap dipertahankan.
 - Migrasi dilakukan bertahap dan dapat dibatalkan per fase.
+- Artefak runtime tetap self-contained: `index.html` meng-inline modul aplikasi yang
+  diperlukan. File di folder `js/` menjadi source modular untuk pemeliharaan, bukan dependency
+  `<script src>` yang wajib tersedia saat aplikasi dibuka.
+- Sinkronisasi source ke artefak runtime dilakukan dengan `node tools/sync-inline-modules.js`
+  sebelum deploy. Script ini bersifat idempotent dan akan gagal jika marker inline hilang.
+- Dependency eksternal hanya boleh ditambahkan setelah jalur CDN, fallback, dan strategi cache
+  service worker diuji pada URL deployment sebenarnya.
 - Perubahan visual dan perubahan aturan bisnis berada di luar refactor arsitektur kecuali
   diperlukan untuk menjaga kontrak modul.
 
@@ -136,4 +143,15 @@ ui/
 - [x] Operasi delete massal dan insert batch restore memakai adapter repository.
 - [x] Rollback insert input dan penghapusan riwayat retur memakai adapter repository.
 - [x] Instrumentasi durasi startup data dan render awal ditambahkan.
+- [x] Query foto/data ringkas beban dan koreksi stok memakai repository.
+- [x] RPC aggregate dashboard dan stok varian dipanggil melalui repository.
+- [x] RPC beban, cleanup transaksi, dan sinkronisasi sequence dipanggil melalui repository.
+- [x] Startup memakai ringkasan dashboard/stok; ledger riwayat lengkap dimuat saat dibutuhkan.
+- [x] Fallback update/delete item transaksi memakai repository.
+- [x] Backup/restore pengaturan memakai repository.
+- [x] Pemanggilan langsung ke tabel inventory utama sudah dipusatkan.
+- [x] Integrasi Pesanan dan FCM dipisahkan ke external repository.
+- [x] Modul repository/domain di-inline ke `index.html` agar kegagalan path file lokal tidak
+  dapat menghentikan startup runtime.
+- [x] Script sinkronisasi source modular ke blok inline dibuat dan diuji idempotent.
 - [ ] Query riwayat besar diubah menjadi pagination sesuai kebutuhan layar.

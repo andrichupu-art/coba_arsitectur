@@ -77,9 +77,36 @@
             return rows;
         }
 
+        async function one(table, select, filters) {
+            let query = client.from(table).select(select || '*');
+            (filters || []).forEach(filter => {
+                query = filter.op === 'in'
+                    ? query.in(filter.column, filter.value)
+                    : query.eq(filter.column, filter.value);
+            });
+            const result = await query.maybeSingle();
+            if (result.error) throw result.error;
+            return result.data || null;
+        }
+
+        async function probe(table, select) {
+            const result = await client.from(table).select(select || '*').limit(1);
+            if (result.error) throw result.error;
+            return result.data || [];
+        }
+
+        async function rpc(functionName, params) {
+            const result = await client.rpc(functionName, params || {});
+            if (result.error) throw result.error;
+            return result.data;
+        }
+
         return {
             writes,
             rows: (table, select, options) => list(table, select, options),
+            one,
+            probe,
+            rpc,
             master: {
                 vendor: () => list('vendor', '*'),
                 brand: () => list('brand', '*'),
