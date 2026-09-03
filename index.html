@@ -5699,7 +5699,7 @@ GRANT EXECUTE ON FUNCTION public.fix_id_sequences() TO anon, authenticated;`;
         // sendiri juga menulis ke tabel ini, tapi setelah sekali jalan jumlah retur sudah
         // turun ke ~100 sehingga panggilan berikutnya langsung berhenti di pengecekan awal.
         if (typeof cekDanArsipkanReturLama === 'function') setTimeout(() => cekDanArsipkanReturLama(), 500);
-        fetchDashboardTotalsServer(); // tidak di-await: KPI update begitu selesai, tidak menunda fetch di atas
+        await Promise.all([fetchDashboardTotalsServer(), fetchStockVariantServer()]);
     }
     async function fetchTransaksiData() {
         const repository = dataRepository;
@@ -5708,7 +5708,14 @@ GRANT EXECUTE ON FUNCTION public.fix_id_sequences() TO anon, authenticated;`;
             repository.transactions.items(),
         ]);
         appData.riwayatTransaksi = RPDataMappers.mapTransactions(trxData, trxItemsData);
-        fetchDashboardTotalsServer(); // tidak di-await: KPI update begitu selesai, tidak menunda fetch di atas
+        await Promise.all([fetchDashboardTotalsServer(), fetchStockVariantServer()]);
+    }
+
+    async function refreshStockCachesAfterMutation() {
+        await Promise.all([fetchDashboardTotalsServer(), fetchStockVariantServer()]);
+        if (!_stockVariantServer || !_dashboardTotalsServer) {
+            await ensureHistoryDataLoaded();
+        }
     }
     // Sinkron status pembayaran ke app Pesanan: dipanggil setiap kali satu atau lebih
     // transaksi ditandai LUNAS. Kalau transaksi itu tercatat berasal dari sebuah pesanan
@@ -6697,11 +6704,12 @@ async function fetchBayarSebagianData() {
         const list = appData.riwayatTransaksi;
         const parentPayloads = payloads.filter(p => p.table === 'transaksi');
         const itemPayloads = payloads.filter(p => p.table === 'transaksi_item');
+        const sameId = (a, b) => a != null && b != null && String(a) === String(b);
 
         for (const p of parentPayloads) {
             if (p.eventType === 'INSERT') {
                 const t = p.new;
-                if (!list.some(x => x.id === t.id)) {
+                if (!list.some(x => sameId(x.id, t.id))) {
                     list.push({
                         id: t.id, vendor: t.vendor, brand: t.brand, model: t.model,
                         harga: t.harga || 0, hargaModal: t.harga_modal || 0, status: t.status,
@@ -6712,7 +6720,7 @@ async function fetchBayarSebagianData() {
                 }
             } else if (p.eventType === 'UPDATE') {
                 const t = p.new;
-                const idx = list.findIndex(x => x.id === t.id);
+                const idx = list.findIndex(x => sameId(x.id, t.id));
                 if (idx === -1) return false; // belum ada lokal, aman-nya fallback full fetch
                 list[idx] = {
                     id: t.id, vendor: t.vendor, brand: t.brand, model: t.model,
@@ -6722,7 +6730,7 @@ async function fetchBayarSebagianData() {
                     items: list[idx].items // pertahankan item yang sudah ada
                 };
             } else if (p.eventType === 'DELETE') {
-                const idx = list.findIndex(x => x.id === p.old.id);
+                const idx = list.findIndex(x => sameId(x.id, p.old.id));
                 if (idx !== -1) list.splice(idx, 1);
             }
         }
@@ -6730,30 +6738,53 @@ async function fetchBayarSebagianData() {
         for (const p of itemPayloads) {
             if (p.eventType === 'INSERT') {
                 const i = p.new;
-                const parent = list.find(x => x.id === i.transaksi_id);
+                const parent = list.find(x => sameId(x.id, i.transaksi_id));
                 if (!parent) return false; // parent belum ada lokal -> fallback full fetch
-                if (!parent.items.some(x => x.id === i.id)) {
+                if (!parent.items.some(x => sameId(x.id, i.id))) {
                     parent.items.push({ id: i.id, warna: i.warna, ukuran: i.ukuran, qty: i.qty, ssk: i.ssk });
                 }
             } else if (p.eventType === 'UPDATE') {
                 const i = p.new;
-                const parent = list.find(x => x.id === i.transaksi_id);
+                const parent = list.find(x => sameId(x.id, i.transaksi_id));
                 if (!parent) return false;
-                const iidx = parent.items.findIndex(x => x.id === i.id);
+                const iidx = parent.items.findIndex(x => sameId(x.id, i.id));
                 const itemData = { id: i.id, warna: i.warna, ukuran: i.ukuran, qty: i.qty, ssk: i.ssk };
                 if (iidx === -1) parent.items.push(itemData); else parent.items[iidx] = itemData;
             } else if (p.eventType === 'DELETE') {
                 // payload.old DELETE default cuma berisi primary key (id), tanpa transaksi_id,
                 // jadi cari & hapus item itu di SEMUA parent (bukan lookup by transaksi_id).
                 for (const parent of list) {
-                    const iidx = parent.items.findIndex(x => x.id === p.old.id);
+                    const iidx = parent.items.findIndex(x => sameId(x.id, p.old.id));
                     if (iidx !== -1) { parent.items.splice(iidx, 1); break; }
                 }
             }
         }
 
         list.sort((a, b) => b.id - a.id); // urutan tampil tetap: terbaru dulu
+        _dedupeTransaksiState();
         return true;
+    }
+
+    function _dedupeTransaksiState() {
+        const list = appData.riwayatTransaksi;
+        const parentById = new Map();
+        for (let idx = list.length - 1; idx >= 0; idx--) {
+            const current = list[idx];
+            const parentKey = current.id == null ? `missing:${idx}` : String(current.id);
+            const existing = parentById.get(parentKey);
+            if (!existing) {
+                parentById.set(parentKey, current);
+                continue;
+            }
+            const itemById = new Map((existing.items || []).filter(item => item.id != null).map(item => [String(item.id), item]));
+            for (const item of current.items || []) {
+                if (item.id == null || !itemById.has(String(item.id))) {
+                    existing.items.push(item);
+                    if (item.id != null) itemById.set(String(item.id), item);
+                }
+            }
+            list.splice(idx, 1);
+        }
     }
 
     function _patchRiwayatInputGroup(payloads) {
@@ -6952,6 +6983,11 @@ async function fetchBayarSebagianData() {
                 // 2) Sisanya (termasuk yang gagal ditambal & butuh fallback) tetap full-fetch
                 const groupsToFetch = groupsToProcess.filter(g => !patchedOk.has(g));
                 await Promise.all(groupsToFetch.map(g => REALTIME_GROUP_HANDLERS[g]?.fetch?.()));
+                // Cache aggregate harus ikut diperbarui setelah INSERT/UPDATE/DELETE,
+                // termasuk gema tulisan sendiri yang sengaja tidak di-patch ulang.
+                if (groupsToProcess.includes('riwayatInput') || groupsToProcess.includes('transaksi')) {
+                    await Promise.all([fetchDashboardTotalsServer(), fetchStockVariantServer()]);
+                }
                 // 3) Render semua grup yang benar-benar perlu di-refresh
                 groupsToProcess.forEach(g => REALTIME_GROUP_HANDLERS[g]?.render?.());
             } catch (e) {
@@ -7443,6 +7479,7 @@ function updateSSK(tab, rowId) {
 
     function renderStokDashboard() {
         _dedupeRiwayatInputState();
+        _dedupeTransaksiState();
         let totalMasuk = 0, totalRetur = 0, totalKeluar = 0;
         if (_dashboardTotalsServer) {
             // Sumber cepat: hasil SUM yang sudah dihitung di database (lihat
@@ -8420,6 +8457,7 @@ function updateSSK(tab, rowId) {
             });
             _dedupeRiwayatInputState();
             // Refresh detail view
+            await refreshStockCachesAfterMutation();
             _detailStokMap = hitungStokBrand(_detailBrandId);
             const totalPcs = Object.values(_detailStokMap).reduce((s, v) => s + Math.max(0, v), 0);
             document.getElementById('detail-brand-total').innerText = totalPcs.toLocaleString('id-ID') + ' Pcs';
@@ -10564,6 +10602,7 @@ function updateSSK(tab, rowId) {
             // try/catch sendiri: kalau ini gagal, cuma dicatat ke console + toast sukses
             // tetap tampil, karena datanya memang sudah aman tersimpan.
             const savedMode = inputState.mode;
+            await refreshStockCachesAfterMutation();
             showToast(savedMode === 'retur' ? '🔄 Retur disimpan!' : '✅ Data masuk disimpan!');
             try {
                 inputState.brandId = null; inputState.brandNama = ''; inputState.modelId = null; inputState.modelNama = '';
@@ -11336,6 +11375,8 @@ function updateSSK(tab, rowId) {
         // (yang berisiko kena 2 baris sekaligus kalau ada variasi ganda) melainkan pakai id yang pasti.
         const itemsWithId = (insertedTrxItems || []).map(i => ({ id: i.id, warna: i.warna, ukuran: i.ukuran, qty: i.qty, ssk: i.ssk }));
         appData.riwayatTransaksi.unshift({ id: trx.id, vendor: snapVendorNama, brand: snapBrandNama, model: snapModelNama, harga: snapModelHarga, hargaModal: snapModelHargaModal, status: snapStatusBayar, tanggal, jam, items: itemsWithId.length ? itemsWithId : items });
+        _dedupeTransaksiState();
+        await refreshStockCachesAfterMutation();
         trxState = { vendorId: null, vendorNama: '', brandId: null, brandNama: '', modelId: null, modelNama: '', modelHarga: 0, modelHargaModal: 0, statusBayar: 'lunas' };
         document.getElementById('trx-vendor-display').textContent = 'Pilih vendor';
         document.getElementById('trx-brand-display').textContent = 'Pilih brand';
